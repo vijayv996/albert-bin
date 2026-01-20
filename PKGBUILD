@@ -5,7 +5,7 @@
 
 pkgname=albert-bin
 _pkgname=albert
-pkgver=34.0.0
+pkgver=34.0.1
 pkgrel=1
 pkgdesc="A sophisticated standalone keyboard launcher. Binary version."
 arch=('x86_64')
@@ -33,7 +33,7 @@ depends=(
 )
 optdepends=('qt6-wayland: Wayland support')
 source=("https://download.opensuse.org/repositories/home:/manuelschneid3r/Arch/x86_64/${_pkgname}-${pkgver}-0-x86_64.pkg.tar.zst")
-sha256sums=('1c25289fc77374439dc58dfc8b33207d25e1b764a2e5e87933d12b168dbe1516')
+sha256sums=('3514d0f90bcfb086f76a5704187a626eca60a8d7ea56efc759621e367aff406c')
 options=('!strip' '!debug')
 
 package() {

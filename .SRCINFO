@@ -1,6 +1,6 @@
 pkgbase = albert-bin
 	pkgdesc = A sophisticated standalone keyboard launcher. Binary version.
-	pkgver = 34.0.0
+	pkgver = 34.0.1
 	pkgrel = 1
 	url = https://albertlauncher.github.io/
 	arch = x86_64
@@ -27,7 +27,7 @@ pkgbase = albert-bin
 	conflicts = albert-git
 	options = !strip
 	options = !debug
-	source = https://download.opensuse.org/repositories/home:/manuelschneid3r/Arch/x86_64/albert-34.0.0-0-x86_64.pkg.tar.zst
-	sha256sums = 1c25289fc77374439dc58dfc8b33207d25e1b764a2e5e87933d12b168dbe1516
+	source = https://download.opensuse.org/repositories/home:/manuelschneid3r/Arch/x86_64/albert-34.0.1-0-x86_64.pkg.tar.zst
+	sha256sums = 3514d0f90bcfb086f76a5704187a626eca60a8d7ea56efc759621e367aff406c
 
 pkgname = albert-bin
