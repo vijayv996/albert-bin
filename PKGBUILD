@@ -33,7 +33,7 @@ depends=(
 )
 optdepends=('qt6-wayland: Wayland support')
 source=("https://download.opensuse.org/repositories/home:/manuelschneid3r/Arch/x86_64/${_pkgname}-${pkgver}-0-x86_64.pkg.tar.zst")
-sha256sums=('453650e5049833a17c2c3340d339d690336fa426bba04557a5bf419e39abd3ec')
+sha256sums=('c33387053db8a008897ce05faafe78177bc58446780aa9294ca521a3716c99c9')
 options=('!strip' '!debug')
 
 package() {
