@@ -28,6 +28,6 @@ pkgbase = albert-bin
 	options = !strip
 	options = !debug
 	source = https://download.opensuse.org/repositories/home:/manuelschneid3r/Arch/x86_64/albert-34.0.10-0-x86_64.pkg.tar.zst
-	sha256sums = b0c7737db74fad0abaf91e99d88de6d760e948af67911d77396756cf240c65a4
+	sha256sums = 329b1e126cf16866c8a1a759e20308a6292ed7bcb3e02217eb0ede265aa398ff
 
 pkgname = albert-bin
