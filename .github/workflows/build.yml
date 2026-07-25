@@ -1,103 +1,139 @@
-name: Build and Release Albert Binary
+name: Update albert-bin
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight
-  workflow_dispatch:     # Can also be triggered manually
+    - cron: '0 6 * * *'   # daily, 06:00 UTC — adjust as you like
+  workflow_dispatch: {}     # lets you trigger it manually too
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  check-and-build:
     runs-on: ubuntu-latest
     container:
-      image: archlinux:latest
-
+      image: archlinux:base-devel
+    outputs:
+      up_to_date: ${{ steps.check.outputs.up_to_date }}
     steps:
-      - name: Fetch Latest Albert Version
-        id: get_version
-        run: |
-          pacman -Syu --noconfirm curl jq
-          # Gets tag name like "v35.1.0" and strips the "v" to leave "35.1.0"
-          LATEST_TAG=$(curl -s https://api.github.com/repos/albertlauncher/albert/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          echo "VERSION=$LATEST_TAG" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
+      - name: Install build dependencies
         run: |
-          pacman -Syu --noconfirm base-devel git cmake ninja qt6-base qt6-declarative qt6-svg qt6-scxml qt6-5compat qt6-tools qt6-shadertools qtkeychain-qt6 libqalculate python pybind11 qcoro-qt6 wget
+          pacman -Syu --noconfirm --needed \
+            git curl jq cmake \
+            hicolor-icon-theme qcoro qt6-5compat qt6-declarative \
+            qt6-scxml qt6-shadertools qt6-svg qtkeychain-qt6 qt6-tools \
+            libqalculate pybind11 python libarchive
 
-      - name: Setup Build Environment
+      - name: Get latest albert release tag
+        id: latest
+        run: |
+          latest_tag=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/albertlauncher/albert/releases/latest | jq -r .tag_name)
+          echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "ver=${latest_tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare against current pkgver
+        id: check
+        run: |
+          current=$(grep -Po '(?<=^pkgver=).*' PKGBUILD)
+          echo "current=$current, latest=${{ steps.latest.outputs.ver }}"
+          if [ "$current" = "${{ steps.latest.outputs.ver }}" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create unprivileged build user
+        if: steps.check.outputs.up_to_date == 'false'
         run: |
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          
-          # Clean build space
-          mkdir -p /tmp/build /tmp/pkg
-          cd /tmp/build
-          
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          wget https://github.com/albertlauncher/albert/releases/download/v${VERSION}/v${VERSION}.tar.gz
-          tar -xzf v${VERSION}.tar.gz
-          
-          # Give builder permissions
-          chown -R builder:builder /tmp/build /tmp/pkg
+          chown -R builder:builder "$GITHUB_WORKSPACE"
 
-      - name: Compile Albert Binary
+      - name: Build binary package from source
+        if: steps.check.outputs.up_to_date == 'false'
         run: |
-          # Finds the extracted source folder automatically
-          SRC_DIR=$(find /tmp/build -maxdepth 1 -mindepth 1 -type d | head -n 1)
-          
-          su builder -c "
-            cd $SRC_DIR
-            mkdir -p build && cd build
-            cmake \
-              -DCMAKE_BUILD_TYPE=MinSizeRel \
-              -DCMAKE_INSTALL_PREFIX=/usr \
-              -DCMAKE_INSTALL_LIBDIR=lib \
-              -DCMAKE_FIND_PACKAGE_RESOLVE_SYMLINKS=ON \
-              -DQHOTKEY_INSTALL=OFF \
-              -DBUILD_PLUGIN_DEBUG=OFF \
-              ..
-            
-            make -j$(nproc)
-            make DESTDIR=/tmp/pkg install
-          "
+          mkdir -p /tmp/build && cd /tmp/build
+          cp "$GITHUB_WORKSPACE/.github/build/PKGBUILD.source-build" PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.latest.outputs.ver }}/" PKGBUILD
+          chown -R builder:builder /tmp/build
+          # sha512sums is left as SKIP since it changes every release;
+          # we're already trusting GitHub's source at this point
+          su builder -c "cd /tmp/build && makepkg -s --noconfirm --skippgpcheck"
+          echo "built_file=$(ls /tmp/build/*.pkg.tar.zst)" >> "$GITHUB_ENV"
 
-      - name: Create Arch Linux Binary Package (.pkg.tar.zst)
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          cd /tmp/pkg
-          
-          # Generate .PKGINFO metadata for Arch Linux package manager
-          cat << EOF > .PKGINFO
-          pkgname = albert-bin
-          pkgver = ${VERSION}-1
-          pkgdesc = A sophisticated standalone keyboard launcher. Binary version.
-          url = https://albertlauncher.github.io/
-          builddate = $(date +%s)
-          packager = Vijay Pedagadi <vijayv996@outlook.com>
-          size = $(du -sb . | cut -f1)
-          arch = x86_64
-          license = custom
-          depend = hicolor-icon-theme
-          depend = qcoro
-          depend = qt6-5compat
-          depend = qt6-declarative
-          depend = qt6-scxml
-          depend = qt6-shadertools
-          depend = qt6-svg
-          depend = qtkeychain-qt6
-          EOF
-
-          # Package into Arch .tar.zst format
-          tar --gno -cnvf - * .PKGINFO | bsdtar -czf /tmp/albert-bin-${VERSION}-1-x86_64.pkg.tar.zst --format=gnutar -@ -
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifact for next job
+        if: steps.check.outputs.up_to_date == 'false'
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.get_version.outputs.VERSION }}
-          name: Albert Binary v${{ steps.get_version.outputs.VERSION }}
-          files: /tmp/albert-bin-${{ steps.get_version.outputs.VERSION }}-1-x86_64.pkg.tar.zst
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: albert-pkg
+          path: /tmp/build/*.pkg.tar.zst
+
+    # up_to_date output above is read by the publish job
+
+  publish:
+    needs: check-and-build
+    if: needs.check-and-build.outputs.up_to_date == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: albert-pkg
+          path: dist
+
+      - name: Compute release variables
+        id: vars
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/albertlauncher/albert/releases/latest | jq -r .tag_name)
+          echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "ver=${latest_tag#v}" >> "$GITHUB_OUTPUT"
+          echo "pkgfile=$(ls dist/*.pkg.tar.zst | xargs basename)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release with the built package
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.vars.outputs.ver }}
+          files: dist/*.pkg.tar.zst
+
+      - name: Update PKGBUILD
+        run: |
+          ver="${{ steps.vars.outputs.ver }}"
+          pkgfile="${{ steps.vars.outputs.pkgfile }}"
+          sha256=$(sha256sum "dist/$pkgfile" | awk '{print $1}')
+          url="https://github.com/${{ github.repository }}/releases/download/v${ver}/${pkgfile}"
+
+          sed -i "s|^pkgver=.*|pkgver=${ver}|" PKGBUILD
+          sed -i "s|^pkgrel=.*|pkgrel=1|" PKGBUILD
+          sed -i "s|^source=(.*)|source=(\"${url}\")|" PKGBUILD
+          sed -i "s|^sha256sums=(.*)|sha256sums=('${sha256}')|" PKGBUILD
+
+      - name: Regenerate .SRCINFO
+        run: |
+          docker run --rm -v "$PWD:/pkg" -w /pkg archlinux:base-devel \
+            bash -c "pacman -Sy --noconfirm --needed pacman-contrib >/dev/null; \
+                     useradd -m b && chown -R b /pkg && \
+                     su b -c 'makepkg --printsrcinfo' > .SRCINFO"
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to v${{ steps.vars.outputs.ver }}" || echo "nothing to commit"
+          git push
+
+      - name: Publish to AUR
+        uses: KSXGithub/github-actions-deploy-aur@v4
+        with:
+          pkgname: albert-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: "Vijay Pedagadi"
+          commit_email: vijayv996@outlook.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to v${{ steps.vars.outputs.ver }}"
