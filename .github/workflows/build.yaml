@@ -1,0 +1,82 @@
+name: Build and Release Albert Binary
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Checks every day at midnight
+  workflow_dispatch:     # Also lets you run it manually if needed
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      # Fetch the latest release tag from albertlauncher/albert
+      - name: Fetch Latest Albert Version
+        id: get_version
+        run: |
+          pacman -Syu --noconfirm curl jq
+          # Gets tag name like "v35.1.0" and strips the "v" to get "35.1.0"
+          LATEST_TAG=$(curl -s https://api.github.com/repos/albertlauncher/albert/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          echo "VERSION=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Update system and install dependencies
+        run: |
+          pacman -Syu --noconfirm base-devel git cmake ninja qt6-base qt6-declarative qt6-svg qt6-scxml qt6-5compat qt6-tools qt6-shadertools qtkeychain-qt6 libqalculate python pybind11 qcoro-qt6 wget
+
+      - name: Create non-root user for makepkg
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Download upstream source
+        run: |
+          mkdir -p /build
+          cd /build
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          wget https://github.com/albertlauncher/albert/releases/download/v${VERSION}/v${VERSION}.tar.gz
+          tar -xzf v${VERSION}.tar.gz
+          chown -R builder:builder /build
+
+      - name: Build binary package
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          su builder -c "
+            cd /build/albert-${VERSION}
+            cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+            cmake --build build
+            DESTDIR=/build/pkg cmake --install build
+          "
+
+      - name: Package into .pkg.tar.zst
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          cd /build/pkg
+          
+          cat << EOF > .PKGINFO
+          pkgname = albert-bin
+          pkgver = ${VERSION}-1
+          pkgdesc = A sophisticated standalone keyboard launcher. Binary version.
+          url = https://albertlauncher.github.io/
+          builddate = $(date +%s)
+          packager = Vijay Pedagadi <vijayv996@outlook.com>
+          size = $(du -sb . | cut -f1)
+          arch = x86_64
+          license = custom
+          depend = qt6-base
+          EOF
+
+          tar --gno -cnvf - * .PKGINFO | bsdtar -czf /build/albert-bin-${VERSION}-1-x86_64.pkg.tar.zst --format=gnutar -@ -
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Albert Binary v${{ steps.get_version.outputs.VERSION }}
+          files: /build/albert-bin-${{ steps.get_version.outputs.VERSION }}-1-x86_64.pkg.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
