@@ -168,7 +168,7 @@ jobs:
           git push
 
       - name: Publish to AUR
-        uses: KSXGithub/github-actions-deploy-aur@v4
+        uses: KSXGithub/github-actions-deploy-aur@v4.2.0
         with:
           pkgname: albert-bin
           pkgbuild: ./PKGBUILD
