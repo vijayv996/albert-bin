@@ -22,7 +22,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             git curl jq cmake \
-            hicolor-icon-theme qcoro-qt6 qt6-5compat qt6-declarative \
+            hicolor-icon-theme qcoro qcoro-qt6 qt6-5compat qt6-declarative \
             qt6-scxml qt6-shadertools qt6-svg qtkeychain-qt6 qt6-tools \
             libqalculate pybind11 python libarchive
 
@@ -66,7 +66,7 @@ jobs:
             echo "arch=('x86_64')"
             echo 'url="https://github.com/albertlauncher"'
             echo "license=('custom')"
-            echo "depends=('hicolor-icon-theme' 'qcoro-qt6' 'qt6-5compat' 'qt6-declarative' 'qt6-scxml' 'qt6-shadertools' 'qt6-svg' 'qtkeychain-qt6')"
+            echo "depends=('hicolor-icon-theme' 'qcoro' 'qcoro-qt6' 'qt6-5compat' 'qt6-declarative' 'qt6-scxml' 'qt6-shadertools' 'qt6-svg' 'qtkeychain-qt6')"
             echo "makedepends=('cmake' 'git' 'libqalculate' 'pybind11' 'python' 'qt6-tools')"
             echo "optdepends=('libarchive: documentation plugin' 'libqalculate: calculator plugin' 'python: python extension')"
             echo "options=('!debug')"
